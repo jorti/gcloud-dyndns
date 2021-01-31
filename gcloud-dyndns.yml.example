@@ -1,12 +1,9 @@
 global:
   ttl: 300
 
-gcp_dns:
+gcp:
   project: example-123456
   credentials_file: /home/user/service-account.json
-  zones:
-    example.com:
-      zone_name: zone-example-com
 
 sources:
   ipv4:

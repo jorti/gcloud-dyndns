@@ -33,10 +33,12 @@ class DnsRecord():
 
     def gcp_update(self):
         changes = self.gcp_zone.changes()
-        if self.gcp_recordset and self.gcp_recordset.rrdatas[0] == str(self.address) and self.gcp_recordset.ttl == self.ttl:
+        if self.gcp_recordset and self.gcp_recordset.rrdatas[0] == str(
+                self.address) and self.gcp_recordset.ttl == self.ttl:
             return
         if self.gcp_recordset:
-            print("Deleting {} record {} -> {}".format(self.gcp_recordset.record_type, self.gcp_recordset.name, self.gcp_recordset.rrdatas[0]))
+            print("Deleting {} record {} -> {}".format(self.gcp_recordset.record_type, self.gcp_recordset.name,
+                                                       self.gcp_recordset.rrdatas[0]))
             changes.delete_record_set(self.gcp_recordset)
         new_record = self.gcp_zone.resource_record_set(self.record_set(), self.type,
                                                        self.ttl, [str(self.address), ])
@@ -96,8 +98,8 @@ if conf["sources"]["ipv4"]:
 if conf["sources"]["ipv6"]:
     ipv6_prefix = get_ipv6_prefix(conf["sources"]["ipv6"])
 
-gcp_credentials = service_account.Credentials.from_service_account_file(conf["gcp_dns"]["credentials_file"])
-gcp_client = dns.Client(project=conf["gcp_dns"]["project"], credentials=gcp_credentials)
+gcp_credentials = service_account.Credentials.from_service_account_file(conf["gcp"]["credentials_file"])
+gcp_client = dns.Client(project=conf["gcp"]["project"], credentials=gcp_credentials)
 
 # Create DnsRecords
 dns_records = []

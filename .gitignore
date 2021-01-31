@@ -1,3 +1,4 @@
 gcloud-dyndns.yml
 ipv6-prefix
 ipv4-address
+*.json
