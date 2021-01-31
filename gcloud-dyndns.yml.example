@@ -1,0 +1,32 @@
+global:
+  ttl: 300
+
+gcp_dns:
+  project: example-123456
+  credentials_file: /home/user/service-account.json
+  zones:
+    example.com:
+      zone_name: zone-example-com
+
+sources:
+  ipv4:
+    type: interface
+    interface: eth0
+  ipv6:
+    type: file
+    file: /run/ipv6-prefix
+
+dns_records:
+  www.example.com:
+    ipv4: yes
+    ipv6: yes
+    ipv6_subnet_hint: 2
+    ipv6_host_addr: 1
+  example.com:
+    ipv4: yes
+    ipv6: yes
+    ipv6_subnet_hint: 2
+    ipv6_host_addr: 1
+  vpn.example.com:
+    ipv4: yes
+    ipv6: no
