@@ -61,6 +61,10 @@ def get_ipv4_address(source):
     if source["type"] == "interface":
         addresses = netifaces.ifaddresses(source["interface"])[netifaces.AF_INET]
         return ipaddress.ip_address(addresses[0]["addr"])
+    if source["type"] == "file":
+        with open(source["file"], "r") as f:
+            content = f.readline().rstrip()
+        return ipaddress.ip_address(content)
     print("ERROR: Unknown IPv4 source type'{}'".format(source["type"]))
     sys.exit(1)
 
@@ -85,7 +89,7 @@ parser = argparse.ArgumentParser(description='Google cloud DynDNS')
 parser.add_argument("--conf-file", "-c", default="/etc/gcloud-dyndns.conf", help="Configuration file")
 args = parser.parse_args()
 with open(args.conf_file, 'r') as conf_file:
-    conf = yaml.load(conf_file)
+    conf = yaml.load(conf_file, Loader=yaml.SafeLoader)
 
 if conf["sources"]["ipv4"]:
     ipv4_address = get_ipv4_address(conf["sources"]["ipv4"])
