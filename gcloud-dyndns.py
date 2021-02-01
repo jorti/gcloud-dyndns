@@ -92,6 +92,13 @@ def get_ipv4_address(source: dict) -> ipaddress.IPv4Address:
 
 
 def get_ipv6_prefix(source: dict) -> ipaddress.IPv6Network:
+    if source["type"] == "interface":
+        addresses = netifaces.ifaddresses(source["interface"])[netifaces.AF_INET6]
+        for address in addresses:
+            prefix = address["netmask"].split('/')[1]
+            net = ipaddress.ip_network(address["addr"] + '/' + prefix, strict=False)
+            if net.is_global and net.prefixlen <= 64:
+                return net
     if source["type"] == "file":
         with open(source["file"], "r") as f:
             content = f.readline().rstrip()
@@ -100,9 +107,13 @@ def get_ipv6_prefix(source: dict) -> ipaddress.IPv6Network:
     sys.exit(1)
 
 
-def calculate_ipv6_address(prefix: ipaddress.IPv6Network, subnet_hint: int, host_addr: int) -> ipaddress.IPv6Address:
-    subnets = list(prefix.subnets(new_prefix=64))
-    target_subnet = subnets[subnet_hint]
+def calculate_ipv6_address(prefix: ipaddress.IPv6Network, subnet_hint, host_addr) -> ipaddress.IPv6Address:
+    if prefix.prefixlen < 64:
+        subnets = list(prefix.subnets(new_prefix=64))
+        target_subnet = subnets[int(str(subnet_hint), 16)]
+    else:
+        print("WARNING: IPv6 Prefix length is {}, ignoring ipv6_subnet_hint".format(prefix.prefixlen))
+        target_subnet = prefix
     target_address = target_subnet[int(str(host_addr), 16)]
     return target_address
 
@@ -113,12 +124,12 @@ args = parser.parse_args()
 with open(args.conf_file, 'r') as conf_file:
     conf = yaml.load(conf_file, Loader=yaml.SafeLoader)
 
-if conf["sources"]["ipv4"]:
+if "ipv4" in conf["sources"]:
     ipv4_address = get_ipv4_address(conf["sources"]["ipv4"])
     print("Discovered IPv4 address: {}".format(ipv4_address))
 else:
     ipv4_address = None
-if conf["sources"]["ipv6"]:
+if "ipv6" in conf["sources"]:
     ipv6_prefix = get_ipv6_prefix(conf["sources"]["ipv6"])
     print("Discovered IPv6 prefix: {}".format(ipv6_prefix))
 else:
