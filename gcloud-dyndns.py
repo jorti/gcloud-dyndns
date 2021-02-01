@@ -39,7 +39,7 @@ class DnsRecord():
     def _get_gcp_zone(self):
         zones = self.gcp_client.list_zones()
         for zone in zones:
-            if zone.dns_name == self.domain() + '.':
+            if zone.dns_name == self.base_domain() + '.':
                 return zone
 
     def _get_gcp_recordset(self):
@@ -66,14 +66,14 @@ class DnsRecord():
         changes.add_record_set(new_record)
         changes.create()
 
-    def domain(self) -> str:
+    def base_domain(self) -> str:
         return '.'.join(self.hostname.split('.')[-2:])
 
     def record_set(self) -> str:
         return self.hostname + '.'
 
     def __str__(self):
-        return self.hostname
+        return "{} {}".format(self.type, self.hostname)
 
     def __repr__(self):
         return "DnsRecord(hostname={}, address={}, type={})".format(self.hostname, self.address, self.type)
