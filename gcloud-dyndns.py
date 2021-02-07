@@ -62,7 +62,7 @@ class DnsRecord():
             changes.delete_record_set(self.gcp_recordset)
         new_record = self.gcp_zone.resource_record_set(self.record_set(), self.type,
                                                        self.ttl, [str(self.address), ])
-        print("Adding {} record {} -> {}".format(new_record.record_type, new_record.name, new_record.rrdatas[0]))
+        print("Adding: %30s %6s %4s %s".format(self.record_set(), self.type, self.ttl, str(self.address)))
         changes.add_record_set(new_record)
         changes.create()
 
