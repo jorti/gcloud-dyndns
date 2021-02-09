@@ -57,12 +57,13 @@ class DnsRecord():
                 self.gcp_recordset.rrdatas[0]))
             return
         if self.gcp_recordset:
-            print("Deleting {} record {} -> {}".format(self.gcp_recordset.record_type, self.gcp_recordset.name,
-                                                       self.gcp_recordset.rrdatas[0]))
+            print("Deleting: %24s %6s %4s %s" % (
+            self.gcp_recordset.name, self.gcp_recordset.ttl, self.gcp_recordset.record_type,
+            self.gcp_recordset.rrdatas[0]))
             changes.delete_record_set(self.gcp_recordset)
         new_record = self.gcp_zone.resource_record_set(self.record_set(), self.type,
                                                        self.ttl, [str(self.address), ])
-        print("Adding: %30s %6s %4s %s".format(self.record_set(), self.type, self.ttl, str(self.address)))
+        print("Adding: %26s %6s %4s %s" % (self.record_set(), self.ttl, self.type, str(self.address)))
         changes.add_record_set(new_record)
         changes.create()
 
