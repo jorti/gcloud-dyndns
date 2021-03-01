@@ -5,25 +5,28 @@ gcp:
   project: example-123456
   credentials_file: /home/user/service-account.json
 
+# Sources of the public IPv4 address and IPv6 delegated prefix
 sources:
   ipv4:
     type: interface
     interface: eth0
   ipv6:
-    type: file
-    file: /run/ipv6-prefix
+    type: interface
+    interface: eth1
+    prefixlen: 56
 
+# DNS records to update
 dns_records:
   www.example.com:
     ipv4: yes
     ipv6: yes
-    ipv6_subnet_hint: 2
+    ipv6_subnet_hint: 2   # Use a hint to calculate the IPv6 subnet
     ipv6_host_addr: 1
   example.com:
     ipv4: yes
     ipv6: yes
-    ipv6_subnet_hint: 2
+    ipv6_subnet_interface: eth2   # Get the IPv6 subnet from a interface
     ipv6_host_addr: 1
   vpn.example.com:
     ipv4: yes
-    ipv6: no
+    ipv6: no   # AAAA record disabled

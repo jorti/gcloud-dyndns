@@ -96,7 +96,10 @@ def get_ipv6_prefix(source: dict) -> ipaddress.IPv6Network:
     if source["type"] == "interface":
         addresses = netifaces.ifaddresses(source["interface"])[netifaces.AF_INET6]
         for address in addresses:
-            prefix = address["netmask"].split('/')[1]
+            if "prefixlen" in source.keys():
+                prefix = str(source["prefixlen"])
+            else:
+                prefix = address["netmask"].split('/')[1]
             net = ipaddress.ip_network(address["addr"] + '/' + prefix, strict=False)
             if net.is_global and net.prefixlen <= 64:
                 return net
@@ -108,14 +111,20 @@ def get_ipv6_prefix(source: dict) -> ipaddress.IPv6Network:
     sys.exit(1)
 
 
-def calculate_ipv6_address(prefix: ipaddress.IPv6Network, subnet_hint, host_addr) -> ipaddress.IPv6Address:
-    if prefix.prefixlen < 64:
-        subnets = list(prefix.subnets(new_prefix=64))
-        target_subnet = subnets[int(str(subnet_hint), 16)]
+def calculate_ipv6_address(prefix: ipaddress.IPv6Network, dns_record_conf: dict) -> ipaddress.IPv6Address:
+    if "ipv6_subnet_interface" in dns_record_conf.keys():
+        target_subnet = get_ipv6_prefix({"type": "interface", "interface": dns_record_conf["ipv6_subnet_interface"]})
+        target_address = target_subnet[int(str(dns_record_conf["ipv6_host_addr"]), 16)]
+    elif "ipv6_subnet_hint" in dns_record_conf.keys():
+        if prefix.prefixlen < 64:
+            subnets = list(prefix.subnets(new_prefix=64))
+            target_subnet = subnets[int(str(dns_record_conf["ipv6_subnet_hint"]), 16)]
+        else:
+            print("WARNING: IPv6 Prefix length is {}, ignoring ipv6_subnet_hint".format(prefix.prefixlen))
+            target_subnet = prefix
+        target_address = target_subnet[int(str(dns_record_conf["ipv6_host_addr"]), 16)]
     else:
-        print("WARNING: IPv6 Prefix length is {}, ignoring ipv6_subnet_hint".format(prefix.prefixlen))
-        target_subnet = prefix
-    target_address = target_subnet[int(str(host_addr), 16)]
+        raise ValueError
     return target_address
 
 
@@ -145,7 +154,7 @@ for dns_record in conf["dns_records"]:
     if dns_record["ipv4"] and ipv4_address:
         dns_records.append(DnsRecord(dns_record["hostname"], ipv4_address, "A", conf["global"]["ttl"], gcp_client))
     if dns_record["ipv6"] and ipv6_prefix:
-        ipv6_address = calculate_ipv6_address(ipv6_prefix, dns_record["ipv6_subnet_hint"], dns_record["ipv6_host_addr"])
+        ipv6_address = calculate_ipv6_address(ipv6_prefix, dns_record)
         dns_records.append(DnsRecord(dns_record["hostname"], ipv6_address, "AAAA", conf["global"]["ttl"], gcp_client))
 
 # Update
