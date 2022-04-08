@@ -16,7 +16,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-
+import shutil
 import sys
 import argparse
 import yaml
@@ -24,6 +24,7 @@ import ipaddress
 import netifaces
 from google.cloud import dns
 from google.oauth2 import service_account
+from subprocess import check_output, SubprocessError
 
 
 class DnsRecord():
@@ -88,6 +89,13 @@ def get_ipv4_address(source: dict) -> ipaddress.IPv4Address:
         with open(source["file"], "r") as f:
             content = f.readline().rstrip()
         return ipaddress.ip_address(content)
+    if source["type"] == "url":
+        try:
+            output = check_output([shutil.which('curl'), '--ipv4', '--silent', '--max-time', '10', source["url"]])
+        except SubprocessError as e:
+            print(f"ERROR: Failed to get IPv4 address using curl {e}")
+            sys.exit(1)
+        return output.decode('utf-8')
     print("ERROR: Unknown IPv4 source type'{}'".format(source["type"]))
     sys.exit(1)
 
