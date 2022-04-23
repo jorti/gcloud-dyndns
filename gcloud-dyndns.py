@@ -25,6 +25,8 @@ import netifaces
 from google.cloud import dns
 from google.oauth2 import service_account
 from subprocess import check_output, SubprocessError
+from time import sleep
+import signal
 
 
 class DnsRecord():
@@ -136,37 +138,48 @@ def calculate_ipv6_address(prefix: ipaddress.IPv6Network, dns_record_conf: dict)
     return target_address
 
 
+def finish(_signo, _stack_frame):
+    print("Goodbye")
+    sys.exit(0)
+
+
 parser = argparse.ArgumentParser(description='Google cloud DynDNS')
 parser.add_argument("--conf-file", "-c", default="/etc/gcloud-dyndns.yml", help="Configuration file")
+sleep_seconds = 300
 args = parser.parse_args()
 with open(args.conf_file, 'r') as conf_file:
     conf = yaml.load(conf_file, Loader=yaml.SafeLoader)
 
-if "ipv4" in conf["sources"]:
-    ipv4_address = get_ipv4_address(conf["sources"]["ipv4"])
-    print("Discovered IPv4 address: {}".format(ipv4_address))
-else:
-    ipv4_address = None
-if "ipv6" in conf["sources"]:
-    ipv6_prefix = get_ipv6_prefix(conf["sources"]["ipv6"])
-    print("Discovered IPv6 prefix: {}".format(ipv6_prefix))
-else:
-    ipv6_prefix = None
+signal.signal(signal.SIGTERM, finish)
+signal.signal(signal.SIGINT, finish)
+# main loop
+while True:
+    if "ipv4" in conf["sources"]:
+        ipv4_address = get_ipv4_address(conf["sources"]["ipv4"])
+        print("Discovered IPv4 address: {}".format(ipv4_address))
+    else:
+        ipv4_address = None
+    if "ipv6" in conf["sources"]:
+        ipv6_prefix = get_ipv6_prefix(conf["sources"]["ipv6"])
+        print("Discovered IPv6 prefix: {}".format(ipv6_prefix))
+    else:
+        ipv6_prefix = None
 
-gcp_credentials = service_account.Credentials.from_service_account_file(conf["gcp"]["credentials_file"])
-gcp_client = dns.Client(project=conf["gcp"]["project"], credentials=gcp_credentials)
+    gcp_credentials = service_account.Credentials.from_service_account_file(conf["gcp"]["credentials_file"])
+    gcp_client = dns.Client(project=conf["gcp"]["project"], credentials=gcp_credentials)
 
-# Create DnsRecords
-dns_records = []
-for dns_record in conf["dns_records"]:
-    if dns_record["ipv4"] and ipv4_address:
-        dns_records.append(DnsRecord(dns_record["hostname"], ipv4_address, "A", conf["global"]["ttl"], gcp_client))
-    if dns_record["ipv6"] and ipv6_prefix:
-        ipv6_address = calculate_ipv6_address(ipv6_prefix, dns_record)
-        dns_records.append(DnsRecord(dns_record["hostname"], ipv6_address, "AAAA", conf["global"]["ttl"], gcp_client))
+    # Create DnsRecords
+    dns_records = []
+    for dns_record in conf["dns_records"]:
+        if dns_record["ipv4"] and ipv4_address:
+            dns_records.append(DnsRecord(dns_record["hostname"], ipv4_address, "A", conf["global"]["ttl"], gcp_client))
+        if dns_record["ipv6"] and ipv6_prefix:
+            ipv6_address = calculate_ipv6_address(ipv6_prefix, dns_record)
+            dns_records.append(DnsRecord(dns_record["hostname"], ipv6_address, "AAAA", conf["global"]["ttl"], gcp_client))
 
-# Update
-for dns_record in dns_records:
-    dns_record.gcp_update()
+    # Update
+    for dns_record in dns_records:
+        dns_record.gcp_update()
 
-print("Goodbye")
+    print(f"Sleeping for {sleep_seconds} seconds...")
+    sleep(sleep_seconds)
