@@ -27,6 +27,7 @@ from google.oauth2 import service_account
 from subprocess import check_output, SubprocessError
 from time import sleep
 import signal
+import logging
 
 
 class DnsRecord():
@@ -55,18 +56,18 @@ class DnsRecord():
         changes = self.gcp_zone.changes()
         if self.gcp_recordset and self.gcp_recordset.rrdatas[0] == str(
                 self.address) and self.gcp_recordset.ttl == self.ttl:
-            print("OK: %30s %6s %4s %s" % (
+            logging.info("OK: %30s %6s %4s %s" % (
                 self.gcp_recordset.name, self.gcp_recordset.ttl, self.gcp_recordset.record_type,
                 self.gcp_recordset.rrdatas[0]))
             return
         if self.gcp_recordset:
-            print("Deleting: %24s %6s %4s %s" % (
+            logging.info("Deleting: %24s %6s %4s %s" % (
             self.gcp_recordset.name, self.gcp_recordset.ttl, self.gcp_recordset.record_type,
             self.gcp_recordset.rrdatas[0]))
             changes.delete_record_set(self.gcp_recordset)
         new_record = self.gcp_zone.resource_record_set(self.record_set(), self.type,
                                                        self.ttl, [str(self.address), ])
-        print("Adding: %26s %6s %4s %s" % (self.record_set(), self.ttl, self.type, str(self.address)))
+        logging.info("Adding: %26s %6s %4s %s" % (self.record_set(), self.ttl, self.type, str(self.address)))
         changes.add_record_set(new_record)
         changes.create()
 
@@ -95,10 +96,10 @@ def get_ipv4_address(source: dict) -> ipaddress.IPv4Address:
         try:
             output = check_output([shutil.which('curl'), '--ipv4', '--silent', '--max-time', '10', source["url"]])
         except SubprocessError as e:
-            print(f"ERROR: Failed to get IPv4 address using curl {e}")
+            logging.critical(f"ERROR: Failed to get IPv4 address using curl {e}")
             sys.exit(1)
         return output.decode('utf-8')
-    print("ERROR: Unknown IPv4 source type'{}'".format(source["type"]))
+    logging.critical("ERROR: Unknown IPv4 source type'{}'".format(source["type"]))
     sys.exit(1)
 
 
@@ -117,7 +118,7 @@ def get_ipv6_prefix(source: dict) -> ipaddress.IPv6Network:
         with open(source["file"], "r") as f:
             content = f.readline().rstrip()
         return ipaddress.ip_network(content)
-    print("ERROR: Unknown IPv6 source type '{}'".format(source["type"]))
+    logging.critical("Unknown IPv6 source type '{}'".format(source["type"]))
     sys.exit(1)
 
 
@@ -130,7 +131,7 @@ def calculate_ipv6_address(prefix: ipaddress.IPv6Network, dns_record_conf: dict)
             subnets = list(prefix.subnets(new_prefix=64))
             target_subnet = subnets[int(str(dns_record_conf["ipv6_subnet_hint"]), 16)]
         else:
-            print("WARNING: IPv6 Prefix length is {}, ignoring ipv6_subnet_hint".format(prefix.prefixlen))
+            logging.warning("IPv6 Prefix length is {}, ignoring ipv6_subnet_hint".format(prefix.prefixlen))
             target_subnet = prefix
         target_address = target_subnet[int(str(dns_record_conf["ipv6_host_addr"]), 16)]
     else:
@@ -139,14 +140,18 @@ def calculate_ipv6_address(prefix: ipaddress.IPv6Network, dns_record_conf: dict)
 
 
 def finish(_signo, _stack_frame):
-    print("Goodbye")
+    logging.info("Goodbye")
     sys.exit(0)
 
 
 parser = argparse.ArgumentParser(description='Google cloud DynDNS')
 parser.add_argument("--conf-file", "-c", default="/etc/gcloud-dyndns.yml", help="Configuration file")
+parser.add_argument("--log-level", default="INFO", help="Log level",
+                    choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
 sleep_seconds = 300
 args = parser.parse_args()
+log_numeric_level = getattr(logging, args.log_level.upper(), None)
+logging.basicConfig(level=log_numeric_level)
 with open(args.conf_file, 'r') as conf_file:
     conf = yaml.load(conf_file, Loader=yaml.SafeLoader)
 
@@ -156,12 +161,12 @@ signal.signal(signal.SIGINT, finish)
 while True:
     if "ipv4" in conf["sources"]:
         ipv4_address = get_ipv4_address(conf["sources"]["ipv4"])
-        print("Discovered IPv4 address: {}".format(ipv4_address))
+        logging.info("Discovered IPv4 address: {}".format(ipv4_address))
     else:
         ipv4_address = None
     if "ipv6" in conf["sources"]:
         ipv6_prefix = get_ipv6_prefix(conf["sources"]["ipv6"])
-        print("Discovered IPv6 prefix: {}".format(ipv6_prefix))
+        logging.info("Discovered IPv6 prefix: {}".format(ipv6_prefix))
     else:
         ipv6_prefix = None
 
@@ -181,5 +186,5 @@ while True:
     for dns_record in dns_records:
         dns_record.gcp_update()
 
-    print(f"Sleeping for {sleep_seconds} seconds...")
+    logging.info(f"Sleeping for {sleep_seconds} seconds...")
     sleep(sleep_seconds)
