@@ -148,7 +148,7 @@ parser = argparse.ArgumentParser(description='Google cloud DynDNS')
 parser.add_argument("--conf-file", "-c", default="/etc/gcloud-dyndns.yml", help="Configuration file")
 parser.add_argument("--log-level", default="INFO", help="Log level",
                     choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
-sleep_seconds = 300
+parser.add_argument("--delay", "-d", default=300, type=int, help="Delay between runs (in seconds)")
 args = parser.parse_args()
 log_numeric_level = getattr(logging, args.log_level.upper(), None)
 logging.basicConfig(level=log_numeric_level)
@@ -186,5 +186,5 @@ while True:
     for dns_record in dns_records:
         dns_record.gcp_update()
 
-    logging.info(f"Sleeping for {sleep_seconds} seconds...")
-    sleep(sleep_seconds)
+    logging.info(f"Sleeping for {args.delay} seconds...")
+    sleep(args.delay)
