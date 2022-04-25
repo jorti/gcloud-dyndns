@@ -30,7 +30,7 @@ import signal
 import logging
 
 
-class DnsRecord():
+class DnsRecord:
     def __init__(self, hostname, address, type, ttl, gcp_client):
         self.hostname = hostname
         self.type = type
@@ -62,8 +62,8 @@ class DnsRecord():
             return
         if self.gcp_recordset:
             logging.info("Deleting: %24s %6s %4s %s" % (
-            self.gcp_recordset.name, self.gcp_recordset.ttl, self.gcp_recordset.record_type,
-            self.gcp_recordset.rrdatas[0]))
+                self.gcp_recordset.name, self.gcp_recordset.ttl, self.gcp_recordset.record_type,
+                self.gcp_recordset.rrdatas[0]))
             changes.delete_record_set(self.gcp_recordset)
         new_record = self.gcp_zone.resource_record_set(self.record_set(), self.type,
                                                        self.ttl, [str(self.address), ])
@@ -98,7 +98,7 @@ def get_ipv4_address(source: dict) -> ipaddress.IPv4Address:
         except SubprocessError as e:
             logging.critical(f"ERROR: Failed to get IPv4 address using curl {e}")
             sys.exit(1)
-        return output.decode('utf-8')
+        return ipaddress.ip_address(output.decode('utf-8'))
     logging.critical("ERROR: Unknown IPv4 source type'{}'".format(source["type"]))
     sys.exit(1)
 
@@ -180,7 +180,8 @@ while True:
             dns_records.append(DnsRecord(dns_record["hostname"], ipv4_address, "A", conf["global"]["ttl"], gcp_client))
         if dns_record["ipv6"] and ipv6_prefix:
             ipv6_address = calculate_ipv6_address(ipv6_prefix, dns_record)
-            dns_records.append(DnsRecord(dns_record["hostname"], ipv6_address, "AAAA", conf["global"]["ttl"], gcp_client))
+            dns_records.append(
+                DnsRecord(dns_record["hostname"], ipv6_address, "AAAA", conf["global"]["ttl"], gcp_client))
 
     # Update
     for dns_record in dns_records:
