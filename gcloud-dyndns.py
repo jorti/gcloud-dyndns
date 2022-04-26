@@ -20,7 +20,7 @@ import shutil
 import sys
 import argparse
 import yaml
-import ipaddress
+from ipaddress import IPv4Address, IPv6Address, IPv6Network, ip_address, ip_network
 import netifaces
 from google.cloud import dns
 from google.oauth2 import service_account
@@ -28,6 +28,7 @@ from subprocess import check_output, SubprocessError
 from time import sleep
 import signal
 import logging
+from typing import Optional
 
 
 class DnsRecord:
@@ -84,26 +85,34 @@ class DnsRecord:
         return "DnsRecord(hostname={}, address={}, type={})".format(self.hostname, self.address, self.type)
 
 
-def get_ipv4_address(source: dict) -> ipaddress.IPv4Address:
+def get_ipv4_address(source: dict) -> Optional[IPv4Address]:
     if source["type"] == "interface":
         addresses = netifaces.ifaddresses(source["interface"])[netifaces.AF_INET]
-        return ipaddress.ip_address(addresses[0]["addr"])
-    if source["type"] == "file":
-        with open(source["file"], "r") as f:
-            content = f.readline().rstrip()
-        return ipaddress.ip_address(content)
-    if source["type"] == "url":
+        return ip_address(addresses[0]["addr"])
+    elif source["type"] == "file":
         try:
-            output = check_output([shutil.which('curl'), '--ipv4', '--silent', '--max-time', '10', source["url"]])
+            with open(source["file"], "r") as f:
+                content = f.readline().rstrip()
+            return ip_address(content)
+        except OSError as e:
+            logging.error(f"Error reading IPv4 address from file {source['file']}: {e}")
+    elif source["type"] == "url":
+        curl_cmd = [shutil.which('curl'), '--ipv4', '--silent', '--max-time', '10', source["url"]]
+        try:
+            logging.debug(f"Running command {curl_cmd}")
+            output = check_output(curl_cmd)
+            return ip_address(output.decode('utf-8'))
         except SubprocessError as e:
-            logging.critical(f"ERROR: Failed to get IPv4 address using curl {e}")
-            sys.exit(1)
-        return ipaddress.ip_address(output.decode('utf-8'))
-    logging.critical("ERROR: Unknown IPv4 source type'{}'".format(source["type"]))
-    sys.exit(1)
+            logging.error("Error getting IPv4 address using curl:")
+            logging.error(curl_cmd)
+            logging.error(e)
+    else:
+        logging.error("Unknown IPv4 source type'{}'".format(source["type"]))
+        raise ValueError
 
 
-def get_ipv6_prefix(source: dict) -> ipaddress.IPv6Network:
+def get_ipv6_prefix(source: dict) -> Optional[IPv6Network]:
+    """ Returns a discovered IPv6 prefix or None"""
     if source["type"] == "interface":
         addresses = netifaces.ifaddresses(source["interface"])[netifaces.AF_INET6]
         for address in addresses:
@@ -111,21 +120,39 @@ def get_ipv6_prefix(source: dict) -> ipaddress.IPv6Network:
                 prefix = str(source["prefixlen"])
             else:
                 prefix = address["netmask"].split('/')[1]
-            net = ipaddress.ip_network(address["addr"] + '/' + prefix, strict=False)
-            if net.is_global and net.prefixlen <= 64:
-                return net
-    if source["type"] == "file":
-        with open(source["file"], "r") as f:
-            content = f.readline().rstrip()
-        return ipaddress.ip_network(content)
-    logging.critical("Unknown IPv6 source type '{}'".format(source["type"]))
-    sys.exit(1)
+            ipv6_network = ip_network(address["addr"] + '/' + prefix, strict=False)
+            if ipv6_network.is_global and ipv6_network.prefixlen <= 64:
+                return ipv6_network
+        logging.error(f"Error reading IPv6 prefix from network interface {source['interface']}")
+    elif source["type"] == "file":
+        try:
+            with open(source["file"], "r") as f:
+                content = f.readline().rstrip()
+            return ip_network(content)
+        except OSError as e:
+            logging.error(f"Error reading IPv6 prefix from file {source['file']}: {e}")
+    elif source["type"] == "url":
+        curl_cmd = [shutil.which('curl'), '--ipv6', '--silent', '--max-time', '10', source["url"]]
+        try:
+            logging.debug(f"Running command {curl_cmd}")
+            output = check_output(curl_cmd)
+            return ip_network(output.decode('utf-8'), strict=False)
+        except SubprocessError as e:
+            logging.error("Error getting IPv6 prefix using curl:")
+            logging.error(curl_cmd)
+            logging.error(e)
+    else:
+        logging.error("Unknown IPv6 source type '{}'".format(source["type"]))
+        raise ValueError
 
 
-def calculate_ipv6_address(prefix: ipaddress.IPv6Network, dns_record_conf: dict) -> ipaddress.IPv6Address:
+def calculate_ipv6_address(prefix: IPv6Network, dns_record_conf: dict) -> Optional[IPv6Address]:
     if "ipv6_subnet_interface" in dns_record_conf.keys():
         target_subnet = get_ipv6_prefix({"type": "interface", "interface": dns_record_conf["ipv6_subnet_interface"]})
-        target_address = target_subnet[int(str(dns_record_conf["ipv6_host_addr"]), 16)]
+        if not target_subnet:
+            logging.error(f"Cannot calculate IPv6 address using interface {dns_record_conf['ipv6_subnet_interface']}")
+            return
+        return target_subnet[int(str(dns_record_conf["ipv6_host_addr"]), 16)]
     elif "ipv6_subnet_hint" in dns_record_conf.keys():
         if prefix.prefixlen < 64:
             subnets = list(prefix.subnets(new_prefix=64))
@@ -133,10 +160,9 @@ def calculate_ipv6_address(prefix: ipaddress.IPv6Network, dns_record_conf: dict)
         else:
             logging.warning("IPv6 Prefix length is {}, ignoring ipv6_subnet_hint".format(prefix.prefixlen))
             target_subnet = prefix
-        target_address = target_subnet[int(str(dns_record_conf["ipv6_host_addr"]), 16)]
+        return target_subnet[int(str(dns_record_conf["ipv6_host_addr"]), 16)]
     else:
-        raise ValueError
-    return target_address
+        logging.error(f"Cannot calculate IPv6 address with dns_record_conf={dns_record_conf}")
 
 
 def finish(_signo, _stack_frame):
@@ -159,14 +185,17 @@ signal.signal(signal.SIGTERM, finish)
 signal.signal(signal.SIGINT, finish)
 # main loop
 while True:
+    # Discover IPv4 and IPv6 addresses
     if "ipv4" in conf["sources"]:
         ipv4_address = get_ipv4_address(conf["sources"]["ipv4"])
-        logging.info("Discovered IPv4 address: {}".format(ipv4_address))
+        if ipv4_address:
+            logging.info(f"Discovered IPv4 address: {ipv4_address}")
     else:
         ipv4_address = None
     if "ipv6" in conf["sources"]:
         ipv6_prefix = get_ipv6_prefix(conf["sources"]["ipv6"])
-        logging.info("Discovered IPv6 prefix: {}".format(ipv6_prefix))
+        if ipv6_prefix:
+            logging.info(f"Discovered IPv6 prefix: {ipv6_prefix}")
     else:
         ipv6_prefix = None
 
@@ -180,8 +209,9 @@ while True:
             dns_records.append(DnsRecord(dns_record["hostname"], ipv4_address, "A", conf["global"]["ttl"], gcp_client))
         if dns_record["ipv6"] and ipv6_prefix:
             ipv6_address = calculate_ipv6_address(ipv6_prefix, dns_record)
-            dns_records.append(
-                DnsRecord(dns_record["hostname"], ipv6_address, "AAAA", conf["global"]["ttl"], gcp_client))
+            if ipv6_address:
+                dns_records.append(
+                    DnsRecord(dns_record["hostname"], ipv6_address, "AAAA", conf["global"]["ttl"], gcp_client))
 
     # Update
     for dns_record in dns_records:
