@@ -132,11 +132,14 @@ def get_ipv6_prefix(source: dict) -> Optional[IPv6Network]:
         except OSError as e:
             logging.error(f"Error reading IPv6 prefix from file {source['file']}: {e}")
     elif source["type"] == "url":
+        if "prefixlen" not in source.keys():
+            logging.error("You need to specify 'prefixlen' for the IPv6 URL method")
+            sys.exit(1)
         curl_cmd = [shutil.which('curl'), '--ipv6', '--silent', '--max-time', '10', source["url"]]
         try:
             logging.debug(f"Running command {curl_cmd}")
-            output = check_output(curl_cmd)
-            return ip_network(output.decode('utf-8'), strict=False)
+            output = check_output(curl_cmd).decode('utf-8')
+            return ip_network(output + '/' + source["prefixlen"], strict=False)
         except SubprocessError as e:
             logging.error("Error getting IPv6 prefix using curl:")
             logging.error(curl_cmd)
