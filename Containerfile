@@ -11,4 +11,4 @@ COPY gcloud-dyndns.py /usr/local/bin/gcloud-dyndns.py
 LABEL maintainer="Juan Orti Alcaine <jortialc@redhat.com>" \
       description="Google Cloud DynDNS"
 USER dyndns:dyndns
-CMD ["/usr/local/bin/gcloud-dyndns.py", "--conf-file=/etc/gcloud-dyndns/gcloud-dyndns.yml"]
+ENTRYPOINT ["/usr/local/bin/gcloud-dyndns.py", "--conf-file=/etc/gcloud-dyndns/gcloud-dyndns.yml"]
