@@ -139,7 +139,7 @@ def get_ipv6_prefix(source: dict) -> Optional[IPv6Network]:
         try:
             logging.debug(f"Running command {curl_cmd}")
             output = check_output(curl_cmd).decode('utf-8')
-            return ip_network(output + '/' + source["prefixlen"], strict=False)
+            return ip_network(output + '/' + str(source["prefixlen"]), strict=False)
         except SubprocessError as e:
             logging.error("Error getting IPv6 prefix using curl:")
             logging.error(curl_cmd)
